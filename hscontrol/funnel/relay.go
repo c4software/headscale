@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -119,7 +120,7 @@ func (r *Relay) Handle(ctx context.Context, c net.Conn, port uint16) error {
 
 	_ = c.SetReadDeadline(time.Now().Add(orDefault(r.HelloTimeout, DefaultHelloTimeout)))
 
-	name, hello, err := readClientHello(io.LimitReader(c, orDefault(r.MaxHelloSize, DefaultMaxHelloSize)))
+	name, hello, err := readClientHello(ctx, io.LimitReader(c, orDefault(r.MaxHelloSize, DefaultMaxHelloSize)))
 	if err != nil {
 		return err
 	}
@@ -170,7 +171,7 @@ func (r *Relay) dialIngress(ctx context.Context, name string, port uint16, src n
 	}
 
 	req.Header.Set("Tailscale-Ingress-Src", src.String())
-	req.Header.Set("Tailscale-Ingress-Target", net.JoinHostPort(name, fmt.Sprint(port)))
+	req.Header.Set("Tailscale-Ingress-Target", net.JoinHostPort(name, strconv.FormatUint(uint64(port), 10)))
 
 	err = req.Write(conn)
 	if err != nil {
@@ -293,7 +294,7 @@ func peerAPIAddr(p *ipnstate.PeerStatus) (netip.AddrPort, error) {
 // readClientHello reads a TLS ClientHello from r and returns its server
 // name, lowercased without a trailing dot, and the bytes read, to replay
 // to the node.
-func readClientHello(r io.Reader) (string, []byte, error) {
+func readClientHello(ctx context.Context, r io.Reader) (string, []byte, error) {
 	var (
 		buf  bytes.Buffer
 		name string
@@ -305,7 +306,7 @@ func readClientHello(r io.Reader) (string, []byte, error) {
 
 			return nil, errHelloRead
 		},
-	}).Handshake()
+	}).HandshakeContext(ctx)
 	if !errors.Is(err, errHelloRead) {
 		return "", nil, fmt.Errorf("reading ClientHello: %w", err)
 	}

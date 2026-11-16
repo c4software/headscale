@@ -62,7 +62,7 @@ type fakeNode struct {
 func newFakeNode(t *testing.T, status int) *fakeNode {
 	t.Helper()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { ln.Close() })
 
@@ -111,7 +111,7 @@ func (n *fakeNode) serve(c net.Conn, cert tls.Certificate) {
 	_, _ = io.WriteString(c, "HTTP/1.1 101 Switching Protocols\r\n\r\n")
 
 	tc := tls.Server(&bufferedConn{Conn: c, r: br}, &tls.Config{Certificates: []tls.Certificate{cert}})
-	if tc.Handshake() != nil {
+	if tc.HandshakeContext(n.t.Context()) != nil {
 		return
 	}
 
@@ -156,7 +156,7 @@ func (b fakeBackend) DialTCP(ctx context.Context, host string, port uint16) (net
 func startRelay(t *testing.T, backend Backend) string {
 	t.Helper()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -169,13 +169,21 @@ func startRelay(t *testing.T, backend Backend) string {
 	return ln.Addr().String()
 }
 
-func dialTLS(addr, serverName string) (*tls.Conn, error) {
-	d := &net.Dialer{Timeout: 3 * time.Second}
+func dialTLS(ctx context.Context, addr, serverName string) (*tls.Conn, error) {
+	d := &tls.Dialer{
+		NetDialer: &net.Dialer{Timeout: 3 * time.Second},
+		Config: &tls.Config{
+			ServerName:         serverName,
+			InsecureSkipVerify: true, //nolint:gosec // self-signed test certificate
+		},
+	}
 
-	return tls.DialWithDialer(d, "tcp", addr, &tls.Config{
-		ServerName:         serverName,
-		InsecureSkipVerify: true, //nolint:gosec // self-signed test certificate
-	})
+	c, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.(*tls.Conn), nil //nolint:forcetypeassert // tls.Dialer returns *tls.Conn
 }
 
 func TestRelayForwardsTLSToNode(t *testing.T) {
@@ -184,7 +192,7 @@ func TestRelayForwardsTLSToNode(t *testing.T) {
 	node := newFakeNode(t, http.StatusSwitchingProtocols)
 	addr := startRelay(t, fakeBackend{peerAPI: node.ln.Addr().String()})
 
-	conn, err := dialTLS(addr, "LAPTOP.ts.example.com.")
+	conn, err := dialTLS(t.Context(), addr, "LAPTOP.ts.example.com.")
 	require.NoError(t, err)
 
 	defer conn.Close()
@@ -228,7 +236,7 @@ func TestRelayDropsWithoutRelaying(t *testing.T) {
 			node := newFakeNode(t, tt.status)
 			addr := startRelay(t, fakeBackend{peerAPI: node.ln.Addr().String()})
 
-			conn, err := dialTLS(addr, tt.serverName)
+			conn, err := dialTLS(t.Context(), addr, tt.serverName)
 			if err == nil {
 				conn.Close()
 			}
