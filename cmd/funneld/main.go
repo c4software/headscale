@@ -31,6 +31,11 @@ import (
 	"tailscale.com/tsnet"
 )
 
+var (
+	errNoLoginServer = errors.New("-login-server is required for the embedded node")
+	errInvalidPort   = errors.New("invalid port")
+)
+
 func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
@@ -42,15 +47,15 @@ func main() {
 
 func run() error {
 	var (
-		ports       = flag.String("ports", "443", "comma-separated public ports to relay, among headscale's funnel.ports; PORT=ADDR listens on ADDR for public port PORT, behind an SNI proxy")
-		listen      = flag.String("listen", "", "address to listen on (empty: all)")
-		useLocal    = flag.Bool("local", false, "use the tailscaled running on this machine instead of an embedded node")
-		socket      = flag.String("socket", "", "tailscaled socket with -local (empty: platform default)")
-		controlURL  = flag.String("login-server", "", "headscale URL, for the embedded node")
-		hostname    = flag.String("hostname", "funnel-relay", "hostname of the embedded node")
-		stateDir    = flag.String("state-dir", "", "state directory of the embedded node (empty: tsnet default)")
-		verbose     = flag.Bool("verbose", false, "log every dropped connection")
-		listeners   []listener
+		ports      = flag.String("ports", "443", "comma-separated public ports to relay, among headscale's funnel.ports; PORT=ADDR listens on ADDR for public port PORT, behind an SNI proxy")
+		listen     = flag.String("listen", "", "address to listen on (empty: all)")
+		useLocal   = flag.Bool("local", false, "use the tailscaled running on this machine instead of an embedded node")
+		socket     = flag.String("socket", "", "tailscaled socket with -local (empty: platform default)")
+		controlURL = flag.String("login-server", "", "headscale URL, for the embedded node")
+		hostname   = flag.String("hostname", "funnel-relay", "hostname of the embedded node")
+		stateDir   = flag.String("state-dir", "", "state directory of the embedded node (empty: tsnet default)")
+		verbose    = flag.Bool("verbose", false, "log every dropped connection")
+		listeners  []listener
 	)
 
 	flag.Parse()
@@ -79,7 +84,7 @@ func run() error {
 		backend = &local.Client{Socket: *socket}
 	} else {
 		if *controlURL == "" {
-			return errors.New("-login-server is required for the embedded node")
+			return errNoLoginServer
 		}
 
 		// The embedded node must not send its logs to Tailscale.
@@ -110,7 +115,7 @@ func run() error {
 	g, gctx := errgroup.WithContext(ctx)
 
 	for _, l := range listeners {
-		ln, err := net.Listen("tcp", l.addr)
+		ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", l.addr)
 		if err != nil {
 			return fmt.Errorf("listening for port %d: %w", l.port, err)
 		}
@@ -136,7 +141,7 @@ func parseListener(s, host string) (listener, error) {
 
 	n, err := strconv.ParseUint(portStr, 10, 16)
 	if err != nil || n == 0 {
-		return listener{}, fmt.Errorf("invalid port %q", s)
+		return listener{}, fmt.Errorf("%w %q", errInvalidPort, s)
 	}
 
 	if !mapped {

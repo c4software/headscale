@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -202,7 +203,7 @@ func TestTailscaleFunnel(t *testing.T) {
 		body, _, err := fetcher.Execute([]string{
 			"curl", "--silent", "--fail", "--max-time", "10",
 			"--connect-to", fmt.Sprintf("%s:%d:%s:%s", fqdn, port, host, relayPort),
-			fmt.Sprintf("https://%s:%d/", fqdn, port),
+			"https://" + net.JoinHostPort(fqdn, strconv.Itoa(int(port))) + "/",
 		}, dockertestutil.ExecuteCommandTimeout(20*time.Second))
 
 		return body, err
