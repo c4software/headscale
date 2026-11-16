@@ -109,13 +109,13 @@ type PolicyManager interface {
 	DebugString() string
 }
 
-// NewPolicyManager returns a new [PolicyManager].
 // WithFunnelRelayTags names the tags of the funnel relay nodes; see
 // [policyv2.WithFunnelRelayTags].
 func WithFunnelRelayTags(tags []string) policyv2.Option {
 	return policyv2.WithFunnelRelayTags(tags)
 }
 
+// NewPolicyManager returns a new [PolicyManager].
 func NewPolicyManager(pol []byte, users []types.User, nodes views.Slice[types.NodeView], opts ...policyv2.Option) (PolicyManager, error) {
 	var (
 		polMan PolicyManager

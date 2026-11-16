@@ -22,7 +22,8 @@ func hasIngressGrantFrom(nm *netmap.NetworkMap, src netip.Addr) bool {
 
 	for _, r := range nm.PacketFilterRules.All() {
 		if !slices.ContainsFunc(r.SrcIPs, func(s string) bool {
-			if p, err := netip.ParsePrefix(s); err == nil {
+			p, err := netip.ParsePrefix(s)
+			if err == nil {
 				return p.Contains(src)
 			}
 

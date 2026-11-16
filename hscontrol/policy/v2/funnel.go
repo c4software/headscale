@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/rs/zerolog/log"
-
 	"tailscale.com/tailcfg"
 	"tailscale.com/tailcfg/nodecap"
 	"tailscale.com/tailcfg/peercap"
