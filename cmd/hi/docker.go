@@ -551,8 +551,25 @@ func getCurrentDockerContext(ctx context.Context) (*DockerContext, error) {
 
 // getDockerSocketPath returns the correct Docker socket path for the current context.
 func getDockerSocketPath() string {
-	// Always use the default socket path for mounting since Docker handles
-	// the translation to the actual socket (e.g., colima socket) internally
+	host := os.Getenv("DOCKER_HOST")
+	if host == "" {
+		dc, err := getCurrentDockerContext(context.Background())
+		if err == nil {
+			if ep, ok := dc.Endpoints["docker"].(map[string]any); ok {
+				host, _ = ep["Host"].(string)
+			}
+		}
+	}
+
+	// A rootless daemon resolves bind sources on the host, where
+	// /var/run/docker.sock belongs to the system daemon, if any. Mount
+	// its own socket instead.
+	if p, ok := strings.CutPrefix(host, "unix://"); ok && strings.HasPrefix(p, "/run/user/") {
+		return p
+	}
+
+	// Otherwise Docker translates the default path to the actual socket
+	// (e.g., colima's) itself.
 	return "/var/run/docker.sock"
 }
 
