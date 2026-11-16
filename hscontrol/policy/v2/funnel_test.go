@@ -1,11 +1,15 @@
 package v2
 
 import (
+	"bytes"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/juanfont/headscale/hscontrol/types"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"tailscale.com/tailcfg"
@@ -123,5 +127,48 @@ func TestFunnelIngressGrant(t *testing.T) {
 				assert.Contains(t, peers[types.NodeID(1)], types.NodeID(2), "allow-all still links alice-laptop and bob-laptop")
 			}
 		})
+	}
+}
+
+// TestFunnelAttrWarning checks the load-time warning for a funnel nodeAttr:
+// only when the server config was passed and leaves funnel disabled, not
+// when nothing is known about it, as in `headscale check`.
+func TestFunnelAttrWarning(t *testing.T) {
+	var buf bytes.Buffer
+
+	prev, prevLevel := log.Logger, zerolog.GlobalLevel()
+	log.Logger = zerolog.New(&buf)
+
+	zerolog.SetGlobalLevel(zerolog.WarnLevel)
+
+	t.Cleanup(func() {
+		log.Logger = prev
+
+		zerolog.SetGlobalLevel(prevLevel)
+	})
+
+	users := nodeAttrsTestUsers()
+	nodes := nodeAttrsTestNodes(users)
+
+	pol := []byte(`{
+		"tagOwners": {` + nodeAttrsTagOwners + `},
+		"nodeAttrs": [{"target": ["alice@example.com"], "attr": ["funnel"]}]
+	}`)
+
+	for _, tt := range []struct {
+		name     string
+		opts     []Option
+		wantWarn bool
+	}{
+		{name: "config not passed"},
+		{name: "funnel disabled", opts: []Option{WithFunnelRelayTags(nil)}, wantWarn: true},
+		{name: "funnel enabled", opts: []Option{WithFunnelRelayTags([]string{"tag:server"})}},
+	} {
+		buf.Reset()
+
+		_, err := NewPolicyManager(pol, users, nodes.ViewSlice(), tt.opts...)
+		require.NoError(t, err, tt.name)
+
+		assert.Equal(t, tt.wantWarn, strings.Contains(buf.String(), "funnel nodeAttr has no effect"), tt.name)
 	}
 }

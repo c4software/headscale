@@ -126,6 +126,9 @@ type PolicyManager struct {
 	// funnelRelayTags are the tags of the funnel relay nodes, from the
 	// server config ([WithFunnelRelayTags]).
 	funnelRelayTags []string
+	// funnelConfigured is set by [WithFunnelRelayTags]: the server config
+	// was passed, so empty relay tags mean funnel is disabled.
+	funnelConfigured bool
 }
 
 // filterAndPolicy combines the compiled filter rules with policy content for hashing.
@@ -270,7 +273,7 @@ func NewPolicyManager(b []byte, users []types.User, nodes views.Slice[types.Node
 	}
 
 	warnMalformedNextDNSAttrs(policy)
-	warnFunnelWithoutRelays(policy, pm.funnelRelayTags)
+	warnFunnelWithoutRelays(policy, pm.funnelConfigured, pm.funnelRelayTags)
 
 	// Boot path: log a warning if the stored policy's tests would
 	// fail against the current users and nodes, but keep the server
@@ -781,7 +784,7 @@ func (pm *PolicyManager) SetPolicy(polB []byte) (bool, error) {
 	// Reloading the same bytes leaves changed false, so each policy warns once.
 	if changed {
 		warnMalformedNextDNSAttrs(pol)
-		warnFunnelWithoutRelays(pol, pm.funnelRelayTags)
+		warnFunnelWithoutRelays(pol, pm.funnelConfigured, pm.funnelRelayTags)
 	}
 
 	return changed, nil

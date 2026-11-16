@@ -19,6 +19,7 @@ type Option func(*PolicyManager)
 func WithFunnelRelayTags(tags []string) Option {
 	return func(pm *PolicyManager) {
 		pm.funnelRelayTags = slices.Clone(tags)
+		pm.funnelConfigured = true
 	}
 }
 
@@ -85,9 +86,11 @@ func (pol *Policy) hasFunnelAttr() bool {
 
 // warnFunnelWithoutRelays logs, once per policy load, that the funnel
 // nodeAttr has no effect while the server config does not enable funnel,
-// which is the only way relay tags get set.
-func warnFunnelWithoutRelays(pol *Policy, relayTags []string) {
-	if len(relayTags) > 0 || !pol.hasFunnelAttr() {
+// which is the only way relay tags get set. configured is false when the
+// caller, such as `headscale check`, did not pass the funnel config at all,
+// so nothing is known about it.
+func warnFunnelWithoutRelays(pol *Policy, configured bool, relayTags []string) {
+	if !configured || len(relayTags) > 0 || !pol.hasFunnelAttr() {
 		return
 	}
 
