@@ -296,7 +296,7 @@ func createTestContainer(ctx context.Context, cli *client.Client, config *RunCon
 	}
 
 	// Get the correct Docker socket path from the current context
-	dockerSocketPath := getDockerSocketPath()
+	dockerSocketPath := getDockerSocketPath(ctx)
 
 	if config.Verbose {
 		log.Printf("Using Docker socket: %s", dockerSocketPath)
@@ -550,10 +550,10 @@ func getCurrentDockerContext(ctx context.Context) (*DockerContext, error) {
 }
 
 // getDockerSocketPath returns the correct Docker socket path for the current context.
-func getDockerSocketPath() string {
+func getDockerSocketPath(ctx context.Context) string {
 	host := os.Getenv("DOCKER_HOST")
 	if host == "" {
-		dc, err := getCurrentDockerContext(context.Background())
+		dc, err := getCurrentDockerContext(ctx)
 		if err == nil {
 			if ep, ok := dc.Endpoints["docker"].(map[string]any); ok {
 				host, _ = ep["Host"].(string)
